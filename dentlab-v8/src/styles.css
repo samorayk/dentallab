@@ -1,0 +1,16 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F6F4EF; color: #1A1612; -webkit-font-smoothing: antialiased; }
+input, select, textarea, button { font-family: inherit; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #E4DFD6; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #C9B98A; }
+@keyframes modalIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+
+/* Responsive nav: hide desktop sidebar on mobile */
+.app-sidebar-desktop { display: none; }
+@media (min-width: 900px) {
+  .app-sidebar-desktop { display: flex; }
+  .app-hamburger { display: none !important; }
+  .app-sidebar-mobile { display: none !important; }
+}
