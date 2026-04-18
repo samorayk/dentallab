@@ -64,7 +64,7 @@ export const dentistPayments = {
     ? supabase.from('dentist_payments').select('*').eq('dentist_id', dentistId).order('date', { ascending: false })
     : supabase.from('dentist_payments').select('*').order('date', { ascending: false }),
   create: (row) => supabase.from('dentist_payments').insert(row),
-  delete: (id) => supabase.from('dentist_payments').delete().eq('id', id),
+  delete: (id)  => supabase.from('dentist_payments').delete().eq('id', id),
 };
 
 export const expenses = {

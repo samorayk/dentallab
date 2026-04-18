@@ -36,17 +36,17 @@ export default function NewCaseModal({ onClose, types, profs }) {
       for (const file of f.files) {
         try { uploaded.push(await storage.upload(id, file)); } catch (_) { /* skip */ }
       }
-      let teinteMeta = null;
+      let teinteUrl = null;
       if (f.teinte_photo) {
-        try { teinteMeta = await storage.upload(id, f.teinte_photo); } catch (_) {}
+        try { const tm = await storage.upload(id, f.teinte_photo); teinteUrl = tm?.url || null; } catch (_) {}
       }
       const { error } = await Cases.create({
-        id, lab_id: labId, patient: f.patient, dentist_id: f.dentist_id,
+        id, lab_id: labId, patient: f.patient, dentist_id: f.dentist_id || null,
         type: f.type, material: f.material, tooth: f.tooth, shade: f.shade,
         priority: f.priority, notes: f.notes, elements: el,
         unit_price: unit, total_price: unit * el, paid: false,
         stage: 'attente', due: f.due || null,
-        files: uploaded, teinte_photo: teinteMeta?.url || null,
+        files: uploaded, teinte_photo: teinteUrl,
         delivery: { status: 'pending', driverName: '', driverPhone: '', deliveredAt: '' },
         assignments: {}, log: [{ at: now(), msg: 'Commande créée' }],
       });

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { settingsApi, types as Types, labs as Labs } from '../lib/db';
-import { Btn, Inp, Card, Lbl, Plus } from '../components/UI';
+import { Btn, Inp, Card, Lbl, Plus, Modal } from '../components/UI';
 import { LANGS } from '../i18n';
 import { CURRENCIES } from '../lib/helpers';
 
@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const [s, setS] = useState(settings);
   const [types, setTypes] = useState([]);
   const [newType, setNewType] = useState({ name: '', elems: 1, price: 0 });
+  const [editType, setEditType] = useState(null);
   const [labName, setLabName] = useState(lab?.name || '');
 
   useEffect(() => { setS(settings); setLabName(lab?.name || ''); }, [settings, lab]);
@@ -22,13 +23,19 @@ export default function SettingsPage() {
   };
   const saveLab = async () => { if (!lab) return; await Labs.update(lab.id, { name: labName }); alert('✓'); };
 
+  const reloadTypes = async () => { const { data } = await Types.list(); setTypes(data || []); };
   const addType = async () => {
     if (!newType.name) return;
     await Types.create({ lab_id: labId, name: newType.name, elems: Number(newType.elems), price: Number(newType.price) });
     setNewType({ name: '', elems: 1, price: 0 });
-    const { data } = await Types.list(); setTypes(data || []);
+    reloadTypes();
   };
-  const delType = async (id) => { await Types.delete(id); const { data } = await Types.list(); setTypes(data || []); };
+  const saveEditType = async () => {
+    if (!editType?.name) return;
+    await Types.update(editType.id, { name: editType.name, elems: Number(editType.elems), price: Number(editType.price) });
+    setEditType(null); reloadTypes();
+  };
+  const delType = async (id) => { if (!confirm('Supprimer ?')) return; await Types.delete(id); reloadTypes(); };
 
   return (
     <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
@@ -75,16 +82,18 @@ export default function SettingsPage() {
       </Card>
 
       <Card>
-        <div style={{ fontSize: FS + 1, fontWeight: 700, marginBottom: 10 }}>🦷 Types de prothèse</div>
+        <div style={{ fontSize: FS + 1, fontWeight: 700, marginBottom: 10 }}>🦷 Matériaux / Types de prothèse</div>
         <div style={{ marginBottom: 10 }}>
           {types.map(tp => (
             <div key={tp.id} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '5px 0', borderBottom: '1px solid ' + c.bdrL, fontSize: FS - 2 }}>
               <span style={{ flex: 1, fontWeight: 600 }}>{tp.name}</span>
               <span style={{ color: c.txL }}>{tp.elems} él · {tp.price} DA</span>
-              <button onClick={() => delType(tp.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.dng }}>🗑</button>
+              <button onClick={() => setEditType({ ...tp })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.ac, fontSize: FS - 2 }}>✏️</button>
+              <button onClick={() => delType(tp.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.dng, fontSize: FS - 2 }}>🗑</button>
             </div>
           ))}
         </div>
+        <div style={{ fontSize: FS - 3, color: c.txL, marginBottom: 6, fontWeight: 600 }}>AJOUTER</div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 6 }}>
           <Inp placeholder="Nom" value={newType.name} onChange={e => setNewType({ ...newType, name: e.target.value })} />
           <Inp type="number" placeholder="Él." value={newType.elems} onChange={e => setNewType({ ...newType, elems: e.target.value })} />
@@ -92,6 +101,21 @@ export default function SettingsPage() {
           <Btn primary onClick={addType}>{Plus}</Btn>
         </div>
       </Card>
+
+      {editType && (
+        <Modal onClose={() => setEditType(null)} w={400}>
+          <div style={{ fontSize: FS + 1, fontWeight: 700, marginBottom: 10 }}>✏️ Modifier le matériau</div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div><Lbl>Nom</Lbl><Inp value={editType.name} onChange={e => setEditType({ ...editType, name: e.target.value })} /></div>
+            <div><Lbl>Éléments par défaut</Lbl><Inp type="number" min="1" value={editType.elems} onChange={e => setEditType({ ...editType, elems: e.target.value })} /></div>
+            <div><Lbl>Prix unitaire</Lbl><Inp type="number" min="0" value={editType.price} onChange={e => setEditType({ ...editType, price: e.target.value })} /></div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 14 }}>
+            <Btn onClick={() => setEditType(null)}>Annuler</Btn>
+            <Btn primary onClick={saveEditType}>Enregistrer</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
