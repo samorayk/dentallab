@@ -1,40 +1,43 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
-import { cases as Cases, dentistPayments as DP, profiles as Profiles, stages as Stages } from '../lib/db';
-import { Btn, Card, Stat, Modal, Lbl, Inp } from '../components/UI';
+import { cases as Cases, dentistPayments as DP, profiles as Profiles, stages as Stages, types as Types } from '../lib/db';
+import { Btn, Card, Stat, Modal, Lbl, Inp, Plus } from '../components/UI';
 import { filterByPeriod, today } from '../lib/helpers';
 import CaseModal from '../components/modals/CaseModal';
+import NewCaseModal from '../components/modals/NewCaseModal';
 
 export default function DoctorPortal() {
   const { theme: c, FS, t, profile, isA, isD, labId, money } = useApp();
-  const [cs, setCs]         = useState([]);
+  const [cs, setCs]             = useState([]);
   const [payments, setPayments] = useState([]);
-  const [profs, setProfs]   = useState([]);
-  const [stgs, setStgs]     = useState([]);
+  const [profs, setProfs]       = useState([]);
+  const [stgs, setStgs]         = useState([]);
+  const [types, setTypes]       = useState([]);
   const [selected, setSelected] = useState(null);
-  const [period, setPeriod] = useState('monthly');
-  const [activeDoc, setActiveDoc] = useState(null); // admin: which dentist to view
-  const [payForm, setPayForm] = useState(null);
-  const [filterPaid, setFilterPaid] = useState('all'); // 'all' | 'paid' | 'unpaid'
+  const [newOpen, setNewOpen]   = useState(false);
+  const [period, setPeriod]     = useState('all');
+  const [activeDoc, setActiveDoc] = useState(null);
+  const [payForm, setPayForm]   = useState(null);
+  const [filterPaid, setFilterPaid] = useState('all');
+  const [tab, setTab]           = useState('orders'); // 'orders' | 'invoices' | 'payments'
 
   const reload = async () => {
-    const [a, p, pf, s] = await Promise.all([
+    const [a, p, pf, s, ty] = await Promise.all([
       Cases.list(),
       DP.list(isD ? profile.id : null),
       Profiles.list(),
       Stages.list(),
+      Types.list(),
     ]);
     setCs(a.data || []);
     setPayments(p.data || []);
     setProfs(pf.data || []);
     setStgs(s.data || []);
+    setTypes(ty.data || []);
   };
   useEffect(() => { reload(); }, [profile.id]);
 
   const dentists = profs.filter(p => p.role === 'dentist');
-
-  // Which dentist are we viewing?
-  const viewDoc = isD ? profile : (activeDoc ? profs.find(p => p.id === activeDoc) : null);
 
   const myCases = isD
     ? cs.filter(x => x.dentist_id === profile.id)
@@ -51,131 +54,207 @@ export default function DoctorPortal() {
   const fc = filterByPeriod(myCases, 'created_at', period);
   const fp = filterByPeriod(myPayments, 'date', period);
 
-  const paid        = fc.filter(x => x.paid).reduce((s, x) => s + Number(x.total_price || 0), 0);
-  const unpaid      = fc.filter(x => !x.paid).reduce((s, x) => s + Number(x.total_price || 0), 0);
-  const invoiced    = fc.reduce((s, x) => s + Number(x.total_price || 0), 0);
-  const transferred = fp.reduce((s, x) => s + Number(x.amount || 0), 0);
-  const remaining   = invoiced - transferred;
+  const totalInvoiced  = fc.reduce((s, x) => s + Number(x.total_price || 0), 0);
+  const totalPaid      = fc.filter(x => x.paid).reduce((s, x) => s + Number(x.total_price || 0), 0);
+  const totalUnpaid    = fc.filter(x => !x.paid).reduce((s, x) => s + Number(x.total_price || 0), 0);
+  const totalTransferred = fp.reduce((s, x) => s + Number(x.amount || 0), 0);
+  const remaining      = totalInvoiced - totalTransferred;
 
-  const displayCases = filterPaid === 'all' ? fc : filterPaid === 'paid' ? fc.filter(x => x.paid) : fc.filter(x => !x.paid);
+  const displayCases = filterPaid === 'all' ? fc
+    : filterPaid === 'paid' ? fc.filter(x => x.paid)
+    : fc.filter(x => !x.paid);
 
   const addPayment = async () => {
     if (!payForm?.amount || !payForm?.dentist_id) return;
-    const { dentistPayments: DPApi } = await import('../lib/db');
-    await DPApi.create({ lab_id: labId, dentist_id: payForm.dentist_id, date: payForm.date, amount: Number(payForm.amount), note: payForm.note });
+    await DP.create({ lab_id: labId, dentist_id: payForm.dentist_id, date: payForm.date, amount: Number(payForm.amount), note: payForm.note });
     setPayForm(null); reload();
   };
-
   const deletePayment = async (id) => {
-    if (!confirm('Supprimer ce versement ?')) return;
-    const { dentistPayments: DPApi } = await import('../lib/db');
-    await DPApi.delete(id);
-    reload();
+    if (!confirm('Supprimer ?')) return;
+    await DP.delete(id); reload();
   };
+
+  const TabBtn = ({ id, label }) => (
+    <button onClick={() => setTab(id)} style={{
+      padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: FS - 1,
+      background: tab === id ? c.ac : c.bg, color: tab === id ? '#fff' : c.txL,
+    }}>{label}</button>
+  );
 
   return (
     <div>
       {/* Admin: dentist selector */}
       {isA && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: FS - 2, fontWeight: 700, color: c.txL, marginBottom: 6 }}>SÉLECTIONNER UN DENTISTE</div>
+        <div style={{ background: c.card, border: '1px solid ' + c.bdr, borderRadius: 10, padding: 10, marginBottom: 12 }}>
+          <div style={{ fontSize: FS - 2, fontWeight: 700, color: c.txL, marginBottom: 6 }}>DENTISTE</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Btn sm primary={!activeDoc} onClick={() => setActiveDoc(null)}>Tous</Btn>
             {dentists.map(d => (
               <Btn key={d.id} sm primary={activeDoc === d.id} onClick={() => setActiveDoc(d.id)}>
-                {d.name}
-                {d.clinic ? <span style={{ fontSize: FS - 4, opacity: 0.8 }}> · {d.clinic}</span> : null}
+                {d.name}{d.clinic ? <span style={{ fontSize: FS - 4, opacity: 0.8 }}> · {d.clinic}</span> : null}
               </Btn>
             ))}
           </div>
         </div>
       )}
 
-      {/* Period filter */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        {['daily', 'monthly', 'yearly', 'all'].map(p => (
-          <Btn key={p} sm primary={period === p} onClick={() => setPeriod(p)}>
-            {p === 'daily' ? 'Jour' : p === 'monthly' ? 'Mois' : p === 'yearly' ? 'Année' : 'Tout'}
-          </Btn>
-        ))}
+      {/* Top bar */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* NEW ORDER button — visible for dentist AND admin */}
+        <Btn primary onClick={() => setNewOpen(true)}>{Plus} Nouvelle commande</Btn>
         {isA && activeDoc && (
-          <Btn sm onClick={() => setPayForm({ dentist_id: activeDoc, date: today(), amount: '', note: '' })} style={{ marginLeft: 'auto' }}>
-            💳 + Versement
-          </Btn>
+          <Btn onClick={() => setPayForm({ dentist_id: activeDoc, date: today(), amount: '', note: '' })}>💳 + Versement</Btn>
         )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+          {['all','monthly','yearly'].map(p => (
+            <Btn key={p} sm primary={period === p} onClick={() => setPeriod(p)}>
+              {p === 'all' ? 'Tout' : p === 'monthly' ? 'Mois' : 'Année'}
+            </Btn>
+          ))}
+        </div>
       </div>
 
       {/* Stats */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        <Stat label="Facturé" val={money(invoiced)} />
-        <Stat label={t('paid')} val={money(paid)} accent={c.ok} />
-        <Stat label={t('unpaid')} val={money(unpaid)} accent={c.dng} />
-        <Stat label={t('transferred')} val={money(transferred)} accent={c.ok} />
-        <Stat label={t('remaining')} val={money(remaining)} accent={remaining > 0 ? c.dng : c.ok} />
+        <Stat label="Total facturé"   val={money(totalInvoiced)} />
+        <Stat label="✓ Payé"          val={money(totalPaid)}      accent={c.ok} />
+        <Stat label="✗ Impayé"        val={money(totalUnpaid)}    accent={c.dng} />
+        <Stat label="Versements reçus" val={money(totalTransferred)} accent={c.ok} />
+        <Stat label="Reste dû"        val={money(remaining)}      accent={remaining > 0 ? c.dng : c.ok} />
       </div>
 
-      {/* Paid/Unpaid filter tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        {[['all','Toutes'],['paid','✓ Payées'],['unpaid','✗ Impayées']].map(([v, l]) => (
-          <button key={v} onClick={() => setFilterPaid(v)}
-            style={{ padding: '4px 14px', borderRadius: 999, border: '1px solid ' + (filterPaid === v ? c.ac : c.bdr),
-              background: filterPaid === v ? c.acL : 'transparent', color: filterPaid === v ? c.ac : c.tx,
-              cursor: 'pointer', fontSize: FS - 2, fontWeight: 600 }}>{l}
-          </button>
-        ))}
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 14, background: c.bg, borderRadius: 10, padding: 4, width: 'fit-content' }}>
+        <TabBtn id="orders"   label="🦷 Commandes" />
+        <TabBtn id="invoices" label="📄 Factures" />
+        <TabBtn id="payments" label="💳 Versements" />
       </div>
 
-      {/* Orders list */}
-      <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 14 }}>
-        {displayCases.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: c.txL }}>Aucune commande</div>}
-        {displayCases.map(x => {
-          const doc  = profs.find(p => p.id === x.dentist_id);
-          const st   = stgs.find(s => s.id === x.stage);
-          return (
-            <div key={x.id} onClick={() => setSelected(x)}
-              style={{ cursor: 'pointer', padding: '10px 14px', borderBottom: '1px solid ' + c.bdrL, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 700, color: c.ac, fontSize: FS - 1, minWidth: 70 }}>#{x.id}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{x.patient}</div>
-                <div style={{ fontSize: FS - 3, color: c.txL }}>{x.type} · {x.material} · 🦷 {x.tooth || '—'}</div>
-                {isA && <div style={{ fontSize: FS - 4, color: c.txL }}>{doc?.name} {doc?.clinic ? '· ' + doc.clinic : ''}</div>}
+      {/* ORDERS TAB */}
+      {tab === 'orders' && (
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Stage progress pills */}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', padding: '8px 12px', borderBottom: '1px solid ' + c.bdrL }}>
+            {stgs.map(s => {
+              const count = fc.filter(x => x.stage === s.id).length;
+              return count > 0 ? (
+                <span key={s.id} style={{ background: s.bg, color: s.color, padding: '2px 10px', borderRadius: 999, fontSize: FS - 3, fontWeight: 700 }}>
+                  {s.label} ({count})
+                </span>
+              ) : null;
+            })}
+          </div>
+          {fc.length === 0 && <div style={{ padding: 30, textAlign: 'center', color: c.txL }}>Aucune commande</div>}
+          {fc.map(x => {
+            const st  = stgs.find(s => s.id === x.stage);
+            const doc = profs.find(p => p.id === x.dentist_id);
+            return (
+              <div key={x.id} onClick={() => setSelected(x)}
+                style={{ cursor: 'pointer', padding: '12px 14px', borderBottom: '1px solid ' + c.bdrL, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, color: c.ac, fontSize: FS - 1, minWidth: 80 }}>#{x.id}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: FS }}>{x.patient}</div>
+                  <div style={{ fontSize: FS - 3, color: c.txL, marginTop: 2 }}>
+                    {x.type} · {x.material} · 🦷 {x.tooth || '—'} · {(x.created_at || '').slice(0, 10)}
+                  </div>
+                  {isA && <div style={{ fontSize: FS - 3, color: c.txL }}>{doc?.name}</div>}
+                </div>
+                {st && <span style={{ background: st.bg, color: st.color, padding: '3px 10px', borderRadius: 10, fontSize: FS - 3, fontWeight: 700 }}>{st.label}</span>}
+                <span style={{ fontSize: FS - 2, color: x.paid ? c.ok : c.dng, fontWeight: 700 }}>{x.paid ? '✓ Payé' : '✗ Impayé'}</span>
               </div>
-              {st && <span style={{ background: st.bg, color: st.color, padding: '2px 8px', borderRadius: 8, fontSize: FS - 3, fontWeight: 600 }}>{st.label}</span>}
-              {isA && <span style={{ fontWeight: 700, fontSize: FS - 1 }}>{money(x.total_price)}</span>}
-              <span style={{ fontSize: FS - 3, color: x.paid ? c.ok : c.dng, fontWeight: 700 }}>
-                {x.paid ? '✓ Payé' : '✗ Impayé'}
-              </span>
-              <span style={{ fontSize: FS - 4, color: c.txL }}>{(x.created_at || '').slice(0, 10)}</span>
-            </div>
-          );
-        })}
-      </Card>
+            );
+          })}
+        </Card>
+      )}
 
-      {/* Payments list (for selected dentist or dentist view) */}
-      {(activeDoc || isD) && myPayments.length > 0 && (
+      {/* INVOICES TAB */}
+      {tab === 'invoices' && (
         <div>
-          <div style={{ fontSize: FS - 1, fontWeight: 700, marginBottom: 6 }}>💳 Versements reçus</div>
-          <Card style={{ padding: 0, overflow: 'hidden' }}>
-            {myPayments.map(p => (
-              <div key={p.id} style={{ padding: '8px 14px', borderBottom: '1px solid ' + c.bdrL, display: 'flex', gap: 10, alignItems: 'center' }}>
-                <span style={{ color: c.txL, fontSize: FS - 3 }}>{p.date}</span>
-                <span style={{ flex: 1, fontSize: FS - 2 }}>{p.note || '—'}</span>
-                <span style={{ fontWeight: 700, color: c.ok }}>{money(p.amount)}</span>
-                {isA && <button onClick={() => deletePayment(p.id)} style={{ background: 'none', border: 'none', color: c.dng, cursor: 'pointer', fontSize: FS - 2 }}>🗑</button>}
-              </div>
+          {/* Filter */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            {[['all','Toutes'],['paid','✓ Payées'],['unpaid','✗ Impayées']].map(([v, l]) => (
+              <button key={v} onClick={() => setFilterPaid(v)}
+                style={{ padding: '5px 14px', borderRadius: 999, border: '1px solid ' + (filterPaid === v ? c.ac : c.bdr),
+                  background: filterPaid === v ? c.acL : 'transparent', color: filterPaid === v ? c.ac : c.tx,
+                  cursor: 'pointer', fontSize: FS - 2, fontWeight: 600 }}>{l}
+              </button>
             ))}
+          </div>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            {displayCases.length === 0 && <div style={{ padding: 30, textAlign: 'center', color: c.txL }}>Aucune facture</div>}
+            {displayCases.map(x => {
+              const doc = profs.find(p => p.id === x.dentist_id);
+              return (
+                <div key={x.id} onClick={() => setSelected(x)}
+                  style={{ cursor: 'pointer', padding: '12px 14px', borderBottom: '1px solid ' + c.bdrL, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{ fontWeight: 700, color: c.ac }}>#{x.id}</span>
+                      <span style={{ fontWeight: 600 }}>{x.patient}</span>
+                    </div>
+                    <div style={{ fontSize: FS - 3, color: c.txL, marginTop: 2 }}>
+                      {x.type} · {x.elements} él. · {(x.created_at || '').slice(0, 10)}
+                      {isA && doc ? ' · ' + doc.name : ''}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 700, fontSize: FS }}>{money(x.total_price)}</div>
+                    <div style={{ fontSize: FS - 3, color: x.paid ? c.ok : c.dng, fontWeight: 700 }}>
+                      {x.paid ? '✓ Payée' : '✗ Impayée'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {/* Total */}
+            {displayCases.length > 0 && (
+              <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: FS, background: c.bg }}>
+                <span>Total ({displayCases.length} factures)</span>
+                <span>{money(displayCases.reduce((s, x) => s + Number(x.total_price || 0), 0))}</span>
+              </div>
+            )}
           </Card>
         </div>
       )}
 
-      {selected && (
-        <CaseModal data={selected} onClose={() => { setSelected(null); reload(); }} stages={stgs} profs={profs} types={[]} />
+      {/* PAYMENTS TAB */}
+      {tab === 'payments' && (
+        <div>
+          <Card style={{ padding: 0, overflow: 'hidden' }}>
+            {myPayments.length === 0 && <div style={{ padding: 30, textAlign: 'center', color: c.txL }}>Aucun versement</div>}
+            {myPayments.map(p => (
+              <div key={p.id} style={{ padding: '10px 14px', borderBottom: '1px solid ' + c.bdrL, display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, color: c.ok }}>💳 {money(p.amount)}</div>
+                  <div style={{ fontSize: FS - 3, color: c.txL }}>{p.date} {p.note ? '· ' + p.note : ''}</div>
+                </div>
+                {isA && <button onClick={() => deletePayment(p.id)} style={{ background: 'none', border: 'none', color: c.dng, cursor: 'pointer' }}>🗑</button>}
+              </div>
+            ))}
+            {myPayments.length > 0 && (
+              <div style={{ padding: '10px 14px', fontWeight: 700, fontSize: FS, background: c.bg, display: 'flex', justifyContent: 'space-between' }}>
+                <span>Total versé</span>
+                <span style={{ color: c.ok }}>{money(totalTransferred)}</span>
+              </div>
+            )}
+          </Card>
+        </div>
       )}
 
-      {/* Add payment modal */}
+      {/* Modals */}
+      {newOpen && (
+        <NewCaseModal
+          onClose={() => { setNewOpen(false); reload(); }}
+          types={types}
+          profs={profs}
+        />
+      )}
+      {selected && (
+        <CaseModal data={selected} onClose={() => { setSelected(null); reload(); }} stages={stgs} profs={profs} types={types} />
+      )}
       {payForm && (
         <Modal onClose={() => setPayForm(null)} w={380}>
-          <div style={{ fontSize: FS + 1, fontWeight: 700, marginBottom: 10 }}>💳 Nouveau versement dentiste</div>
+          <div style={{ fontSize: FS + 1, fontWeight: 700, marginBottom: 10 }}>💳 Nouveau versement</div>
           <div style={{ display: 'grid', gap: 8 }}>
             <div><Lbl>Date</Lbl><Inp type="date" value={payForm.date} onChange={e => setPayForm({ ...payForm, date: e.target.value })} /></div>
             <div><Lbl>Montant</Lbl><Inp type="number" value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} /></div>

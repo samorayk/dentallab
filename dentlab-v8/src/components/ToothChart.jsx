@@ -4,11 +4,13 @@ import { TEETH_UPPER, TEETH_LOWER, toothKind, isUpperTooth } from '../lib/teeth'
 export default function ToothChart({ value = '', onChange, readOnly = false }) {
   const { theme: c, FS, t } = useApp();
   const sel = new Set((value || '').split(',').map(s => s.trim()).filter(Boolean));
+
   const toggle = (n) => {
     if (readOnly) return;
     const k = String(n);
-    if (sel.has(k)) sel.delete(k); else sel.add(k);
-    onChange?.([...sel].join(','));
+    const next = new Set(sel);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    onChange?.([...next].join(','));
   };
   const clear = () => !readOnly && onChange?.('');
 
@@ -17,128 +19,186 @@ export default function ToothChart({ value = '', onChange, readOnly = false }) {
   const LR = TEETH_LOWER.slice(0, 8);
   const LL = TEETH_LOWER.slice(8, 16);
 
-  const Arch = ({ right, left, label, lower }) => (
-    <div>
-      <div style={{ fontSize: FS - 4, fontWeight: 600, color: c.txL, textAlign: 'center', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'stretch', justifyContent: 'center' }}>
-        <div className="chart-half" style={{ display: 'grid', gridTemplateColumns: 'repeat(8,1fr)', gap: 2, flex: 1 }}>
-          {right.map(n => <Tooth key={n} n={n} sel={sel.has(String(n))} onClick={() => toggle(n)} theme={c} lower={lower} />)}
-        </div>
-        <div style={{ width: 2, background: c.bdr, margin: '0 4px', borderRadius: 1 }} />
-        <div className="chart-half" style={{ display: 'grid', gridTemplateColumns: 'repeat(8,1fr)', gap: 2, flex: 1 }}>
-          {left.map(n => <Tooth key={n} n={n} sel={sel.has(String(n))} onClick={() => toggle(n)} theme={c} lower={lower} />)}
-        </div>
-      </div>
-    </div>
-  );
-
   return (
-    <div style={{ background: 'linear-gradient(180deg,#FDFBF5 0%,#F7F2E8 100%)', border: '1.5px solid ' + c.bdr, borderRadius: 12, padding: 12 }}>
-      <style>{`@media(max-width:520px){.chart-half{gap:1px!important;}}`}</style>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
-        <div style={{ fontSize: FS - 2, fontWeight: 700, color: c.tx, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span>🦷</span><span>{t('teethChart')}</span>
-          <span style={{ fontSize: FS - 4, color: c.txL, fontWeight: 500 }}>FDI</span>
+    <div style={{ background: '#FAFAF8', border: '1.5px solid ' + c.bdr, borderRadius: 14, padding: 14, userSelect: 'none' }}>
+      <style>{`
+        .tooth-btn { cursor:pointer; display:flex; flex-direction:column; align-items:center; padding:0; border:none; background:transparent; outline:none; -webkit-tap-highlight-color:transparent; }
+        .tooth-btn:hover svg { filter: brightness(0.92); }
+        @media(max-width:520px){ .chart-half{ gap:1px!important; } }
+      `}</style>
+
+      {/* Title */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ fontSize:16 }}>🦷</span>
+          <span style={{ fontWeight:700, fontSize:FS-1, color:c.tx }}>Schéma dentaire</span>
+          <span style={{ fontSize:FS-4, color:c.txL, background:c.bg, padding:'1px 7px', borderRadius:999, fontWeight:600 }}>FDI</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {sel.size > 0 && <span style={{ fontSize: FS - 3, fontWeight: 700, color: c.ac, background: c.acL, padding: '2px 8px', borderRadius: 10 }}>{sel.size} sél.</span>}
-          {sel.size > 0 && !readOnly && <button type="button" onClick={clear} style={{ background: 'none', border: 'none', color: c.txL, fontSize: FS - 3, cursor: 'pointer', textDecoration: 'underline' }}>effacer</button>}
+        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+          {sel.size > 0 && (
+            <span style={{ fontWeight:700, fontSize:FS-3, color:'#fff', background:c.ac, padding:'2px 9px', borderRadius:999 }}>
+              {sel.size} dent{sel.size > 1 ? 's' : ''}
+            </span>
+          )}
+          {sel.size > 0 && !readOnly && (
+            <button onClick={clear} style={{ background:'none', border:'none', color:c.txL, fontSize:FS-3, cursor:'pointer', textDecoration:'underline' }}>Effacer</button>
+          )}
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Arch right={UR} left={UL} label="Maxillaire" lower={false} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ flex: 1, height: 1, background: c.bdr }} />
-          <span style={{ fontSize: FS - 5, color: c.txL, letterSpacing: 0.5 }}>OCCLUSION</span>
-          <div style={{ flex: 1, height: 1, background: c.bdr }} />
-        </div>
-        <Arch right={LR} left={LL} label="Mandibule" lower={true} />
+
+      {/* Legend */}
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:FS-4, color:c.txL, marginBottom:6, fontWeight:600 }}>
+        <span>Droite du patient →</span>
+        <span>← Gauche du patient</span>
       </div>
+
+      {/* Upper arch label */}
+      <div style={{ textAlign:'center', fontSize:FS-3, fontWeight:700, color:c.txL, letterSpacing:1, marginBottom:4 }}>MAXILLAIRE SUPÉRIEUR</div>
+
+      {/* Upper arch */}
+      <Arch right={UR} left={UL} lower={false} sel={sel} toggle={toggle} c={c} FS={FS} />
+
+      {/* Occlusion line */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, margin:'10px 0' }}>
+        <div style={{ flex:1, height:1.5, background:'linear-gradient(to right, transparent, '+c.bdr+')' }} />
+        <span style={{ fontSize:FS-5, color:c.txL, letterSpacing:1.5, fontWeight:700 }}>LIGNE D'OCCLUSION</span>
+        <div style={{ flex:1, height:1.5, background:'linear-gradient(to left, transparent, '+c.bdr+')' }} />
+      </div>
+
+      {/* Lower arch */}
+      <Arch right={LR} left={LL} lower={true} sel={sel} toggle={toggle} c={c} FS={FS} />
+
+      {/* Lower arch label */}
+      <div style={{ textAlign:'center', fontSize:FS-3, fontWeight:700, color:c.txL, letterSpacing:1, marginTop:4 }}>MAXILLAIRE INFÉRIEUR</div>
+
+      {/* Manual input */}
       {!readOnly && (
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: FS - 3, color: c.txM, fontWeight: 600 }}>Saisie:</span>
-          <input value={value || ''} onChange={e => onChange?.(e.target.value)} placeholder="ex: 14, 24, 36"
-            style={{ flex: 1, minWidth: 120, padding: '6px 10px', fontSize: FS - 2, border: '1px solid ' + c.bdr, borderRadius: 6, background: '#fff', color: c.tx, outline: 'none' }} />
+        <div style={{ marginTop:12, display:'flex', gap:6, alignItems:'center', background:c.bg, padding:'6px 10px', borderRadius:8 }}>
+          <span style={{ fontSize:FS-3, color:c.txL, fontWeight:600, whiteSpace:'nowrap' }}>Saisie manuelle:</span>
+          <input value={value || ''} onChange={e => onChange?.(e.target.value)}
+            placeholder="ex: 14, 24, 36, 46"
+            style={{ flex:1, padding:'5px 10px', fontSize:FS-2, border:'1px solid '+c.bdr, borderRadius:6, outline:'none', background:'#fff', color:c.tx, fontFamily:'inherit' }} />
+        </div>
+      )}
+
+      {/* Selected list */}
+      {sel.size > 0 && (
+        <div style={{ marginTop:8, display:'flex', flexWrap:'wrap', gap:4 }}>
+          {[...sel].sort((a,b)=>Number(a)-Number(b)).map(n => (
+            <span key={n} style={{ background:c.acL, color:c.ac, fontWeight:700, fontSize:FS-3, padding:'2px 8px', borderRadius:999 }}>
+              {n}
+            </span>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-/* ── Realistic anatomical tooth ── */
-function Tooth({ n, sel, onClick, theme: c, lower }) {
-  const k = toothKind(n);
-  const isUp = isUpperTooth(n);
-  // For lower teeth we flip vertically so roots point down
-  const flip = lower ? 'scaleY(-1)' : 'none';
+function Arch({ right, left, lower, sel, toggle, c, FS }) {
+  return (
+    <div style={{ display:'flex', alignItems:'stretch', justifyContent:'center', gap:0 }}>
+      <div className="chart-half" style={{ display:'grid', gridTemplateColumns:'repeat(8,1fr)', gap:3, flex:1 }}>
+        {right.map(n => <ToothSVG key={n} n={n} sel={sel.has(String(n))} onClick={()=>toggle(n)} lower={lower} c={c} FS={FS} />)}
+      </div>
+      {/* Center divider */}
+      <div style={{ width:3, background:'linear-gradient(to bottom, '+c.bdr+', '+c.bdr+')', margin:'0 6px', borderRadius:2, position:'relative' }}>
+        <div style={{ position:'absolute', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:8, height:8, background:c.bdr, borderRadius:'50%' }} />
+      </div>
+      <div className="chart-half" style={{ display:'grid', gridTemplateColumns:'repeat(8,1fr)', gap:3, flex:1 }}>
+        {left.map(n => <ToothSVG key={n} n={n} sel={sel.has(String(n))} onClick={()=>toggle(n)} lower={lower} c={c} FS={FS} />)}
+      </div>
+    </div>
+  );
+}
 
-  const fillCrown = sel ? c.ac : '#FFF9F0';
-  const fillRoot  = sel ? (c.acD || '#1B4332') : '#E8D5B0';
-  const stroke    = sel ? (c.acD || '#1B4332') : '#A89060';
-  const sw = sel ? 1.6 : 1.1;
-  const hilite = sel ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)';
-  const lineClr = sel ? 'rgba(255,255,255,0.3)' : '#C8A870';
+function ToothSVG({ n, sel, onClick, lower, c, FS }) {
+  const kind  = toothKind(n);
+  const flip  = lower ? 'scaleY(-1)' : 'none';
 
-  // Crown shapes — anatomically inspired, viewed from buccal
-  const crowns = {
-    incisor:  'M5 14 Q5 7 7 5 Q12 3 17 5 Q19 7 19 14 Q17 16 12 16 Q7 16 5 14Z',
-    canine:   'M6 15 Q5 8 8 4 Q12 2 16 4 Q18 8 18 15 Q16 17 12 17 Q8 17 6 15Z',
-    premolar: 'M4 15 Q4 8 6 5 Q12 3 18 5 Q20 8 20 15 Q18 17 12 17 Q6 17 4 15Z',
-    molar:    'M3 14 Q3 7 5 5 Q12 2 19 5 Q21 7 21 14 Q19 17 12 17 Q5 17 3 14Z',
-  };
-  // Highlight / shine on crown
-  const shines = {
-    incisor:  'M8 6 Q12 4 16 6',
-    canine:   'M9 5 Q12 3 15 5',
-    premolar: 'M7 6 Q12 4 17 6',
-    molar:    'M6 6 Q12 3 18 6',
-  };
-  // Occlusal lines (cusps/ridges)
-  const cusps = {
-    incisor:  'M9 13 L9 10 M15 13 L15 10',
-    canine:   'M12 4 L12 10',
-    premolar: 'M9 6 Q9 10 9 13 M15 6 Q15 10 15 13 M9 11 L15 11',
-    molar:    'M8 6 Q8 10 8 13 M12 5 Q12 10 12 14 M16 6 Q16 10 16 13 M5 10 L19 10',
-  };
-  // Root shapes
-  const roots = {
-    incisor:  'M9 16 Q9 23 9 26 M15 16 Q15 23 15 26',
-    canine:   'M12 17 Q12 24 12 28',
-    premolar: 'M8 17 Q7 23 7 27 M16 17 Q17 23 17 27',
-    molar:    'M7 17 Q6 21 6 25 M12 17 Q12 22 12 26 M17 17 Q18 21 18 25',
+  // Colors
+  const crownFill   = sel ? c.ac        : '#FFFEF8';
+  const crownStroke = sel ? (c.acD||'#1B4332') : '#B8A070';
+  const rootFill    = sel ? (c.acD||'#1B4332') : '#E2C99A';
+  const rootStroke  = sel ? (c.acD||'#1B4332') : '#B8A070';
+  const lineColor   = sel ? 'rgba(255,255,255,0.5)' : '#D4B888';
+  const shineColor  = sel ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.7)';
+  const sw = sel ? 1.8 : 1.3;
+
+  // Each tooth type has a unique anatomical profile
+  const profiles = {
+    incisor: {
+      crown: 'M7,18 L7,8 Q7,4 10,3 Q14,2 18,3 Q21,4 21,8 L21,18 Q17,20 14,20 Q11,20 7,18 Z',
+      roots: [{ d:'M10,20 Q10,27 10,32', w:3.5 }, { d:'M18,20 Q18,27 18,32', w:3.5 }],
+      shine: 'M10,5 Q14,3.5 18,5',
+      grooves: 'M10,14 L10,10 M14,13 L14,9 M18,14 L18,10',
+      viewBox: '0 0 28 34',
+    },
+    canine: {
+      crown: 'M7,19 L7,9 Q7,4 10,3 Q14,1.5 18,3 Q21,5 21,9 L21,19 Q17,21 14,21 Q11,21 7,19 Z',
+      roots: [{ d:'M14,21 Q14,29 13,34', w:4 }],
+      shine: 'M10,5 Q14,3 18,5',
+      grooves: 'M14,4 L14,14',
+      viewBox: '0 0 28 36',
+    },
+    premolar: {
+      crown: 'M5,19 L5,9 Q5,4 8,3 Q14,1.5 20,3 Q23,4 23,9 L23,19 Q19,21 14,21 Q9,21 5,19 Z',
+      roots: [{ d:'M9,21 Q8,28 8,33', w:3.5 }, { d:'M19,21 Q20,28 20,33', w:3.5 }],
+      shine: 'M8,5 Q14,3 20,5',
+      grooves: 'M9,7 L9,15 M14,6 L14,16 M19,7 L19,15 M9,12 L19,12',
+      viewBox: '0 0 28 35',
+    },
+    molar: {
+      crown: 'M4,18 L4,8 Q4,3 8,2.5 Q14,1 20,2.5 Q24,3 24,8 L24,18 Q20,21 14,21 Q8,21 4,18 Z',
+      roots: [{ d:'M8,21 Q7,27 7,32', w:4 }, { d:'M14,21 Q14,28 14,32', w:3.5 }, { d:'M20,21 Q21,27 21,32', w:4 }],
+      shine: 'M7,5 Q14,2.5 21,5',
+      grooves: 'M9,7 L9,16 M14,6 L14,17 M19,7 L19,16 M5,12 L23,12',
+      viewBox: '0 0 28 34',
+    },
   };
 
-  // ViewBox is taller for lower teeth (roots go down = more space below crown)
-  const vb = '0 0 24 30';
+  const p = profiles[kind];
 
   return (
-    <button type="button" onClick={onClick} aria-pressed={sel}
-      style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', padding: 0, border: 'none', background: 'transparent', outline: 'none', WebkitTapHighlightColor: 'transparent' }}>
-      <svg width="100%" viewBox={vb} style={{ maxWidth: 38, display: 'block', transform: flip }}>
+    <button className="tooth-btn" type="button" onClick={onClick} aria-pressed={sel}
+      title={`Dent ${n} — ${kind === 'incisor' ? 'Incisive' : kind === 'canine' ? 'Canine' : kind === 'premolar' ? 'Prémolaire' : 'Molaire'}`}>
+      <svg width="100%" viewBox={p.viewBox} style={{ maxWidth:44, display:'block', transform:flip, transition:'transform 0.1s' }}>
         <defs>
-          <linearGradient id={'cg' + n} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={sel ? c.acL || '#B7E4C7' : '#FFFDF8'} />
-            <stop offset="100%" stopColor={fillCrown} />
+          <linearGradient id={`cg${n}`} x1="20%" y1="0%" x2="80%" y2="100%">
+            <stop offset="0%"   stopColor={sel ? (c.acL||'#B7E4C7') : '#FFFFFF'} />
+            <stop offset="100%" stopColor={crownFill} />
           </linearGradient>
-          <linearGradient id={'rg' + n} x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor={fillRoot} />
-            <stop offset="100%" stopColor={sel ? c.ac : '#D4B896'} />
+          <linearGradient id={`rg${n}`} x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"   stopColor={rootFill} />
+            <stop offset="100%" stopColor={sel ? c.ac : '#C8A870'} stopOpacity="0.6" />
           </linearGradient>
+          <filter id={`sh${n}`} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor={sel ? c.ac : '#B8A070'} floodOpacity="0.3" />
+          </filter>
         </defs>
+
         {/* Roots */}
-        <path d={roots[k]} stroke={stroke} strokeWidth={sw * 0.9} fill="none" strokeLinecap="round" />
-        {/* Root fill areas for molars/premolars */}
-        {(k === 'molar' || k === 'premolar') && (
-          <path d={roots[k]} stroke={'url(#rg' + n + ')'} strokeWidth={sw * 3} fill="none" strokeLinecap="round" opacity="0.4" />
-        )}
+        {p.roots.map((r, i) => (
+          <path key={i} d={r.d} stroke={'url(#rg'+n+')'} strokeWidth={r.w} fill="none" strokeLinecap="round" />
+        ))}
+        {p.roots.map((r, i) => (
+          <path key={'s'+i} d={r.d} stroke={rootStroke} strokeWidth={0.7} fill="none" strokeLinecap="round" />
+        ))}
+
         {/* Crown body */}
-        <path d={crowns[k]} fill={'url(#cg' + n + ')'} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
-        {/* Occlusal detail lines */}
-        <path d={cusps[k]} stroke={lineClr} strokeWidth="0.75" fill="none" strokeLinecap="round" />
-        {/* Shine highlight */}
-        <path d={shines[k]} stroke={hilite} strokeWidth="1.5" fill="none" strokeLinecap="round" opacity="0.8" />
+        <path d={p.crown} fill={`url(#cg${n})`} stroke={crownStroke} strokeWidth={sw}
+          strokeLinejoin="round" filter={`url(#sh${n})`} />
+
+        {/* Occlusal grooves */}
+        <path d={p.grooves} stroke={lineColor} strokeWidth="0.8" fill="none" strokeLinecap="round" />
+
+        {/* Shine / highlight */}
+        <path d={p.shine} stroke={shineColor} strokeWidth="2" fill="none" strokeLinecap="round" />
+
+        {/* Selected: inner ring highlight */}
+        {sel && <path d={p.crown} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="3" strokeLinejoin="round" />}
       </svg>
-      <span style={{ fontSize: 8, fontWeight: 700, color: sel ? (c.acD || '#1B4332') : '#9A8A6A', marginTop: 1, lineHeight: 1 }}>{n}</span>
+      <span style={{ fontSize:8.5, fontWeight:700, color: sel ? (c.acD||'#1B4332') : '#9A8060', marginTop:2, lineHeight:1 }}>{n}</span>
     </button>
   );
 }
