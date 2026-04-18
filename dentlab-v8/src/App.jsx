@@ -37,9 +37,9 @@ export default function App() {
   if (!subActive) return <SubscriptionBlocked status={subStatus} brand={brand} signOut={signOut} />;
 
   const nav = isT ? [
-    { id: 'techPortal', l: t('myWork') }, { id: 'profile', l: t('profile') },
+    { id: 'techPortal', l: t('myWork') }, { id: 'delivery', l: t('delivery') }, { id: 'profile', l: t('profile') },
   ] : isD ? [
-    { id: 'doctorPortal', l: t('myOrders') }, { id: 'profile', l: t('profile') },
+    { id: 'doctorPortal', l: t('myOrders') }, { id: 'delivery', l: t('delivery') }, { id: 'profile', l: t('profile') },
   ] : [
     { id: 'dashboard', l: t('dashboard') }, { id: 'cases', l: t('cases') },
     { id: 'doctorPortal', l: t('myOrders') }, { id: 'techPortal', l: t('myWork') },
