@@ -56,3 +56,6 @@ create policy "tech_pay all" on public.technician_payments
 -- HOW TO RUN:
 --   Supabase dashboard → SQL Editor → paste this file → Run
 -- =========================================================
+
+-- ── 6. Font family in lab_settings ──
+alter table public.lab_settings add column if not exists font_family text default 'Inter';

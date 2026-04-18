@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from './contexts/AppContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -23,30 +23,64 @@ const PAGES = {
   profile: Profile, doctorPortal: DoctorPortal, techPortal: TechPortal,
 };
 
+// Professional font families
+export const FONT_FAMILIES = [
+  { id: 'Inter',              label: 'Inter',           sample: 'Modern & Clean' },
+  { id: 'Roboto',             label: 'Roboto',          sample: 'Google Standard' },
+  { id: 'Open Sans',          label: 'Open Sans',       sample: 'Readable' },
+  { id: 'Lato',               label: 'Lato',            sample: 'Elegant' },
+  { id: 'Nunito',             label: 'Nunito',          sample: 'Rounded & Friendly' },
+  { id: 'Poppins',            label: 'Poppins',         sample: 'Modern Geometric' },
+  { id: 'Montserrat',         label: 'Montserrat',      sample: 'Bold & Professional' },
+  { id: 'Source Sans 3',      label: 'Source Sans',     sample: 'Adobe Classic' },
+  { id: 'Playfair Display',   label: 'Playfair Display',sample: 'Serif Editorial' },
+  { id: 'Merriweather',       label: 'Merriweather',    sample: 'Serif Readable' },
+];
+
 export default function App() {
   const { session, profile, loading, isA, isD, isT, theme: c, FS, rtl, t, signOut,
-          subStatus, subActive, subDaysLeft, brand } = useApp();
+          subStatus, subActive, subDaysLeft, brand, fontFamily,
+          notifications, clearNotif } = useApp();
   const [page, setPage] = useState(isD ? 'doctorPortal' : isT ? 'techPortal' : 'dashboard');
   const [mobOpen, setMobOpen] = useState(false);
+
+  // Load Google Font dynamically
+  useEffect(() => {
+    if (!fontFamily || fontFamily === 'Inter') return;
+    const id = 'gfont-' + fontFamily.replace(/\s/g, '-');
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${fontFamily.replace(/ /g, '+')}:wght@400;500;600;700&display=swap`;
+    document.head.appendChild(link);
+  }, [fontFamily]);
 
   if (loading) return <FullScreen msg={t('loading')} />;
   if (!session) return <Login />;
   if (!profile) return <FullScreen msg="Profil introuvable. Contactez l'administrateur." />;
-
-  // Subscription blocker — only non-admin blocked from the app; admin can still access Settings to see the subscription status.
   if (!subActive) return <SubscriptionBlocked status={subStatus} brand={brand} signOut={signOut} />;
 
   const nav = isT ? [
-    { id: 'techPortal', l: t('myWork') }, { id: 'delivery', l: t('delivery') }, { id: 'profile', l: t('profile') },
+    { id: 'techPortal', l: t('myWork') },
+    { id: 'profile', l: t('profile') },
   ] : isD ? [
-    { id: 'doctorPortal', l: t('myOrders') }, { id: 'delivery', l: t('delivery') }, { id: 'profile', l: t('profile') },
+    { id: 'doctorPortal', l: t('myOrders') },
+    { id: 'delivery', l: t('delivery') },
+    { id: 'profile', l: t('profile') },
   ] : [
-    { id: 'dashboard', l: t('dashboard') }, { id: 'cases', l: t('cases') },
-    { id: 'doctorPortal', l: t('myOrders') }, { id: 'techPortal', l: t('myWork') },
-    { id: 'delivery', l: t('delivery') }, { id: 'stock', l: t('stock') },
-    { id: 'suppliers', l: t('suppliers') }, { id: 'expenses', l: t('expenses') },
-    { id: 'reports', l: t('reports') }, { id: 'users', l: t('users') },
-    { id: 'settings', l: t('settings') }, { id: 'profile', l: t('profile') },
+    { id: 'dashboard', l: t('dashboard') },
+    { id: 'cases', l: t('cases') },
+    { id: 'doctorPortal', l: t('myOrders') },
+    { id: 'techPortal', l: t('myWork') },
+    { id: 'delivery', l: t('delivery') },
+    { id: 'stock', l: t('stock') },
+    { id: 'suppliers', l: t('suppliers') },
+    { id: 'expenses', l: t('expenses') },
+    { id: 'reports', l: t('reports') },
+    { id: 'users', l: t('users') },
+    { id: 'settings', l: t('settings') },
+    { id: 'profile', l: t('profile') },
   ];
 
   const Page = PAGES[page] || Dashboard;
@@ -58,7 +92,8 @@ export default function App() {
         <span style={{ fontSize: 22 }}>🦷</span>
         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 15, fontWeight: 700, color: '#E8F5E9', flex: 1 }}>DentLab Pro</div>
       </div>
-      <div onClick={() => { setPage('profile'); setMobOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px', marginBottom: 10, background: 'rgba(82,183,136,.15)', borderRadius: 8, cursor: 'pointer' }}>
+      <div onClick={() => { setPage('profile'); setMobOpen(false); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px', marginBottom: 10, background: 'rgba(82,183,136,.15)', borderRadius: 8, cursor: 'pointer' }}>
         <Av u={profile} sz={30} />
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: FS - 2, fontWeight: 600, color: '#E8F5E9', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</div>
@@ -68,13 +103,13 @@ export default function App() {
       <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {nav.map(n => (
           <button key={n.id} onClick={() => { setPage(n.id); setMobOpen(false); }}
-            style={{
-              padding: '9px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
+            style={{ padding: '9px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
               background: page === n.id ? 'rgba(82,183,136,.22)' : 'transparent',
               color: page === n.id ? '#B7E4C7' : '#95D5B2',
               fontSize: FS - 1, fontWeight: page === n.id ? 600 : 500,
-              textAlign: rtl ? 'right' : 'left',
-            }}>{n.l}</button>
+              textAlign: rtl ? 'right' : 'left' }}>
+            {n.l}
+          </button>
         ))}
       </nav>
       <button onClick={signOut} style={{ padding: '8px 10px', marginTop: 10, borderRadius: 7, border: '1px solid rgba(82,183,136,.3)', background: 'transparent', color: '#95D5B2', cursor: 'pointer', fontSize: FS - 2 }}>
@@ -85,7 +120,26 @@ export default function App() {
   );
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: c.bg, direction: rtl ? 'rtl' : 'ltr', fontSize: FS }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: c.bg, direction: rtl ? 'rtl' : 'ltr', fontSize: FS, fontFamily: `'${fontFamily}', -apple-system, BlinkMacSystemFont, sans-serif` }}>
+      {/* Notifications overlay */}
+      <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 340 }}>
+        {notifications.map(n => (
+          <div key={n.id} style={{
+            background: n.type === 'ok' ? '#065F46' : n.type === 'err' ? '#991B1B' : n.type === 'warn' ? '#92400E' : '#1E3A5F',
+            color: '#fff', padding: '12px 16px', borderRadius: 10,
+            boxShadow: '0 4px 20px rgba(0,0,0,.25)', display: 'flex', gap: 10, alignItems: 'flex-start',
+            animation: 'fadeIn .2s ease-out',
+          }}>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>
+              {n.type === 'ok' ? '✅' : n.type === 'err' ? '❌' : n.type === 'warn' ? '⚠️' : '🔔'}
+            </span>
+            <span style={{ flex: 1, fontSize: FS - 2, lineHeight: 1.4 }}>{n.msg}</span>
+            <button onClick={() => clearNotif(n.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.7)', cursor: 'pointer', fontSize: 16, padding: 0, flexShrink: 0 }}>×</button>
+          </div>
+        ))}
+      </div>
+
+      {/* Sidebar desktop */}
       <div className="app-sidebar-desktop" style={{ width: 220, position: 'sticky', top: 0, height: '100vh', flexDirection: 'column' }}>
         <Sidebar />
       </div>
@@ -98,10 +152,9 @@ export default function App() {
         </>
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {/* Trial banner - show if trial ending in <7 days */}
         {subStatus === 'trial' && subDaysLeft !== null && subDaysLeft <= 7 && (
           <div style={{ background: '#FEF3C7', color: '#92400E', padding: '8px 14px', fontSize: FS - 2, textAlign: 'center', fontWeight: 600 }}>
-            ⚠ Essai gratuit — {subDaysLeft > 0 ? `${subDaysLeft} jour(s) restant(s)` : 'expire aujourd\'hui'}.
+            ⚠ Essai gratuit — {subDaysLeft > 0 ? `${subDaysLeft} jour(s) restant(s)` : "expire aujourd'hui"}.
             {brand.dev_phone && <> Contactez {brand.dev_name || 'le support'}: <a href={`tel:${brand.dev_phone}`} style={{ color: '#92400E', fontWeight: 700 }}>{brand.dev_phone}</a></>}
           </div>
         )}
@@ -131,8 +184,7 @@ function FullScreen({ msg }) {
 
 function SubscriptionBlocked({ status, brand, signOut }) {
   const msg = status === 'expired' ? 'Votre abonnement a expiré.'
-           : status === 'suspended' ? 'Votre compte est suspendu.'
-           : 'Abonnement inactif.';
+    : status === 'suspended' ? 'Votre compte est suspendu.' : 'Abonnement inactif.';
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #C53030 0%, #7C2D2D 100%)', padding: 20 }}>
       <div style={{ background: '#fff', padding: 32, borderRadius: 16, maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 24px 60px rgba(0,0,0,.3)' }}>
@@ -140,7 +192,6 @@ function SubscriptionBlocked({ status, brand, signOut }) {
         <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 700, marginTop: 8 }}>Accès suspendu</div>
         <div style={{ color: '#5C5346', marginTop: 10, fontSize: 14 }}>{msg}</div>
         <div style={{ marginTop: 20, padding: 16, background: '#F6F4EF', borderRadius: 10, fontSize: 13 }}>
-          <div style={{ color: '#9B9182', fontSize: 11, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Pour renouveler, contactez:</div>
           {brand.dev_name && <div style={{ fontWeight: 700, fontSize: 15 }}>{brand.dev_name}</div>}
           {brand.dev_phone && <div style={{ marginTop: 4 }}>📞 <a href={`tel:${brand.dev_phone}`} style={{ color: '#2D6A4F', fontWeight: 600 }}>{brand.dev_phone}</a></div>}
           {brand.dev_email && <div>✉️ <a href={`mailto:${brand.dev_email}`} style={{ color: '#2D6A4F' }}>{brand.dev_email}</a></div>}

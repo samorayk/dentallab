@@ -77,6 +77,7 @@ export const expenses = {
 export const settingsApi = {
   get: () => supabase.from('lab_settings').select('*').single(),
   update: (labId, patch) => supabase.from('lab_settings').update(patch).eq('lab_id', labId),
+  upsert: (labId, patch) => supabase.from('lab_settings').upsert({ lab_id: labId, ...patch }),
 };
 
 // NEW — subscriptions (read-only for lab members)

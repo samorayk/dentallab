@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { cases as Cases, storage } from '../../lib/db';
-import { Modal, Btn, Inp, Sel, Lbl, Txt, X } from '../UI';
+import { Modal, Btn, Inp, Sel, Lbl, Txt } from '../UI';
 import ToothChart from '../ToothChart';
 import { newCaseId, today, now } from '../../lib/helpers';
 
+const MATERIALS = ['Zircone','E.max','PFM','Or','Résine','Composite','Céramique','PMMA','Titane'];
+
 export default function NewCaseModal({ onClose, types, profs }) {
-  const { t, theme: c, FS, labId, profile, isD } = useApp();
+  const { t, theme: c, FS, labId, profile, isD, pushNotif } = useApp();
   const docs = profs.filter(p => p.role === 'dentist');
   const defaultType = types[0];
   const [f, setF] = useState({
     patient: '',
     dentist_id: isD ? profile.id : docs[0]?.id || '',
     type: defaultType?.name || '',
-    material: 'Zircone', tooth: '', shade: 'A2',
-    priority: 'medium', notes: '', due: '',
+    material: 'Zircone',
+    tooth: '', shade: 'A2', priority: 'medium', notes: '', due: '',
     elements: defaultType?.elems || 1,
     files: [], teinte_photo: null,
   });
@@ -27,14 +29,12 @@ export default function NewCaseModal({ onClose, types, profs }) {
     setErr(''); setSaving(true);
     try {
       const id = newCaseId();
-      // Silent price calc from type default (never shown in form)
       const tp = types.find(x => x.name === f.type);
       const unit = tp?.price || 0;
       const el = Number(f.elements) || 1;
-      // Upload files first
       const uploaded = [];
       for (const file of f.files) {
-        try { uploaded.push(await storage.upload(id, file)); } catch (_) { /* skip */ }
+        try { uploaded.push(await storage.upload(id, file)); } catch (_) {}
       }
       let teinteUrl = null;
       if (f.teinte_photo) {
@@ -51,66 +51,120 @@ export default function NewCaseModal({ onClose, types, profs }) {
         assignments: {}, log: [{ at: now(), msg: 'Commande créée' }],
       });
       if (error) throw error;
+      pushNotif?.(`Commande créée : ${f.patient}`, 'ok');
       onClose();
     } catch (e) { setErr(e.message || 'Erreur'); }
     finally { setSaving(false); }
   };
 
   return (
-    <Modal onClose={onClose} w={560}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: FS + 2, fontWeight: 700, fontFamily: "'Playfair Display', serif" }}>{t('newOrder')}</div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.txL, fontSize: 20 }}>×</button>
+    <Modal onClose={onClose} w={580}>
+      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:12 }}>
+        <div style={{ fontSize:FS+2, fontWeight:700, fontFamily:"'Playfair Display', serif" }}>{t('newOrder')}</div>
+        <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:c.txL, fontSize:20 }}>×</button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <div style={{ gridColumn: '1/-1' }}><Lbl>{t('patient')} *</Lbl><Inp value={f.patient} onChange={e => set('patient', e.target.value)} /></div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        {/* Patient */}
+        <div style={{ gridColumn:'1/-1' }}>
+          <Lbl>{t('patient')} *</Lbl>
+          <Inp value={f.patient} onChange={e=>set('patient',e.target.value)} placeholder="Nom du patient" />
+        </div>
+
+        {/* Dentist (admin only) */}
         {!isD && (
-          <div style={{ gridColumn: '1/-1' }}>
+          <div style={{ gridColumn:'1/-1' }}>
             <Lbl>Dentiste</Lbl>
-            <Sel value={f.dentist_id} onChange={e => set('dentist_id', e.target.value)}>
-              {docs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            <Sel value={f.dentist_id} onChange={e=>set('dentist_id',e.target.value)}>
+              <option value="">— Sélectionner —</option>
+              {docs.map(d=><option key={d.id} value={d.id}>{d.name}{d.clinic?' · '+d.clinic:''}</option>)}
             </Sel>
           </div>
         )}
+
+        {/* Type de prothèse */}
         <div>
-          <Lbl>{t('type')}</Lbl>
-          <Sel value={f.type} onChange={e => { const tp = types.find(x => x.name === e.target.value); set('type', e.target.value); if (tp) set('elements', tp.elems); }}>
-            {types.map(tp => <option key={tp.id}>{tp.name}</option>)}
+          <Lbl>Type de prothèse</Lbl>
+          <Sel value={f.type} onChange={e=>{
+            const tp=types.find(x=>x.name===e.target.value);
+            set('type',e.target.value);
+            if(tp) set('elements',tp.elems);
+          }}>
+            {types.map(tp=><option key={tp.id} value={tp.name}>{tp.name}</option>)}
           </Sel>
         </div>
-        <div><Lbl>{t('material')}</Lbl>
-          <Sel value={f.material} onChange={e => set('material', e.target.value)}>
-            {['Zircone', 'E.max', 'PFM', 'Or', 'Résine', 'Composite'].map(m => <option key={m}>{m}</option>)}
+
+        {/* Matériau — separate from type */}
+        <div>
+          <Lbl>Matériau</Lbl>
+          <Sel value={f.material} onChange={e=>set('material',e.target.value)}>
+            {MATERIALS.map(m=><option key={m} value={m}>{m}</option>)}
           </Sel>
         </div>
-        <div style={{ gridColumn: '1/-1' }}><ToothChart value={f.tooth} onChange={v => set('tooth', v)} /></div>
-        <div><Lbl>{t('shade')}</Lbl><Inp value={f.shade} onChange={e => set('shade', e.target.value)} /></div>
-        <div><Lbl>{t('elements')}</Lbl><Inp type="number" min="1" value={f.elements} onChange={e => set('elements', Number(e.target.value))} /></div>
-        <div><Lbl>{t('priority')}</Lbl>
-          <Sel value={f.priority} onChange={e => set('priority', e.target.value)}>
-            <option value="high">Haute</option><option value="medium">Moyenne</option><option value="low">Basse</option>
+
+        {/* Tooth chart */}
+        <div style={{ gridColumn:'1/-1' }}>
+          <ToothChart value={f.tooth} onChange={v=>set('tooth',v)} />
+        </div>
+
+        {/* Shade */}
+        <div>
+          <Lbl>{t('shade')}</Lbl>
+          <Inp value={f.shade} onChange={e=>set('shade',e.target.value)} placeholder="A2, B1…" />
+        </div>
+
+        {/* Elements */}
+        <div>
+          <Lbl>{t('elements')}</Lbl>
+          <Inp type="number" min="1" value={f.elements} onChange={e=>set('elements',Number(e.target.value))} />
+        </div>
+
+        {/* Priority */}
+        <div>
+          <Lbl>{t('priority')}</Lbl>
+          <Sel value={f.priority} onChange={e=>set('priority',e.target.value)}>
+            <option value="high">🔴 Haute</option>
+            <option value="medium">🟡 Moyenne</option>
+            <option value="low">🟢 Basse</option>
           </Sel>
         </div>
-        <div><Lbl>{t('due')}</Lbl><Inp type="date" value={f.due} onChange={e => set('due', e.target.value)} /></div>
-        <div style={{ gridColumn: '1/-1' }}><Lbl>{t('notes')}</Lbl><Txt value={f.notes} onChange={e => set('notes', e.target.value)} /></div>
-        <div style={{ gridColumn: '1/-1' }}>
-          <Lbl>Fichiers (scans, STL, photos…)</Lbl>
-          <input type="file" multiple onChange={e => set('files', Array.from(e.target.files || []))}
-            style={{ fontSize: FS - 2, padding: 6, width: '100%' }} />
-          {f.files.length > 0 && <div style={{ fontSize: FS - 3, color: c.ac, marginTop: 4 }}>{f.files.length} fichier(s)</div>}
+
+        {/* Due date */}
+        <div>
+          <Lbl>{t('due')}</Lbl>
+          <Inp type="date" value={f.due} onChange={e=>set('due',e.target.value)} />
         </div>
+
+        {/* Notes */}
+        <div style={{ gridColumn:'1/-1' }}>
+          <Lbl>{t('notes')}</Lbl>
+          <Txt value={f.notes} onChange={e=>set('notes',e.target.value)} rows={2} />
+        </div>
+
+        {/* Files */}
+        <div style={{ gridColumn:'1/-1' }}>
+          <Lbl>📎 Fichiers (scans STL, photos…)</Lbl>
+          <input type="file" multiple onChange={e=>set('files',Array.from(e.target.files||[]))}
+            style={{ fontSize:FS-2, padding:6, width:'100%', border:'1px solid '+c.bdr, borderRadius:7, background:'#fff' }} />
+          {f.files.length > 0 && <div style={{ fontSize:FS-3, color:c.ac, marginTop:4 }}>✓ {f.files.length} fichier(s) sélectionné(s)</div>}
+        </div>
+
+        {/* Teinte photo — only for Zircone */}
         {f.material === 'Zircone' && (
-          <div style={{ gridColumn: '1/-1', background: '#FEF3C7', borderRadius: 8, padding: 10 }}>
-            <Lbl>🎨 Photo de teinte (requis Zircone)</Lbl>
-            <input type="file" accept="image/*" onChange={e => set('teinte_photo', e.target.files?.[0] || null)}
-              style={{ fontSize: FS - 2, padding: 4, width: '100%' }} />
+          <div style={{ gridColumn:'1/-1', background:'#FEF3C7', borderRadius:8, padding:10, border:'1px solid #FDE68A' }}>
+            <Lbl>🎨 Photo de teinte (requis pour Zircone)</Lbl>
+            <input type="file" accept="image/*" onChange={e=>set('teinte_photo',e.target.files?.[0]||null)}
+              style={{ fontSize:FS-2, padding:4, width:'100%' }} />
+            {f.teinte_photo && <div style={{ fontSize:FS-3, color:'#92400E', marginTop:4 }}>✓ {f.teinte_photo.name}</div>}
           </div>
         )}
       </div>
-      {err && <div style={{ color: c.dng, fontSize: 12, padding: 8, background: '#FEF2F2', borderRadius: 6, marginTop: 10 }}>{err}</div>}
-      <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+
+      {err && <div style={{ color:c.dng, fontSize:12, padding:8, background:'#FEF2F2', borderRadius:6, marginTop:10 }}>{err}</div>}
+
+      <div style={{ display:'flex', gap:8, marginTop:14, justifyContent:'flex-end' }}>
         <Btn onClick={onClose}>{t('cancel')}</Btn>
-        <Btn primary onClick={save} disabled={saving}>{saving ? '…' : t('create')}</Btn>
+        <Btn primary onClick={save} disabled={saving}>{saving?'…':t('create')}</Btn>
       </div>
     </Modal>
   );

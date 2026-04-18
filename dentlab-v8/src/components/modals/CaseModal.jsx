@@ -9,18 +9,36 @@ import EtiquetteModal from './EtiquetteModal';
 import ShareModal from './ShareModal';
 import QRModal from './QRModal';
 
+const MATERIALS = ['Zircone','E.max','PFM','Or','Résine','Composite','Céramique','PMMA','Titane'];
+
+// Stages that need file/teinte access
+const FRAISAGE_STAGES  = ['fraisage','conception','impression'];
+const MAQUILLAGE_STAGES = ['maquillage','four'];
+
 export default function CaseModal({ data, onClose, stages, profs, types }) {
-  const { t, theme: c, FS, labId, isA, isT, profile, money } = useApp();
-  const [x, setX] = useState(data);
-  const [sub, setSub] = useState(null);
+  const { t, theme: c, FS, labId, isA, isT, profile, money, pushNotif } = useApp();
+  const [x, setX]       = useState(data);
+  const [sub, setSub]   = useState(null);
   const [editing, setEditing] = useState(false);
-  const [ef, setEf] = useState({});
+  const [ef, setEf]     = useState({});
   const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
+  const [err, setErr]   = useState('');
 
   const docs  = profs.filter(p => p.role === 'dentist');
   const techs = profs.filter(p => p.role === 'technician');
-  const st = stages.find(s => s.id === x.stage);
+  const st    = stages.find(s => s.id === x.stage);
+
+  // What stages is this tech assigned to?
+  const myAssignedStages = isT
+    ? Object.entries(x.assignments || {}).filter(([_, v]) => v?.techId === profile.id).map(([sid]) => sid)
+    : [];
+
+  const canSeeFiles = isA
+    || myAssignedStages.some(sid => FRAISAGE_STAGES.includes(sid))
+    || myAssignedStages.some(sid => MAQUILLAGE_STAGES.includes(sid));
+
+  const canSeeTeintePhoto = isA
+    || myAssignedStages.some(sid => [...FRAISAGE_STAGES, ...MAQUILLAGE_STAGES].includes(sid));
 
   const save = async (patch) => {
     const next = { ...x, ...patch };
@@ -30,17 +48,10 @@ export default function CaseModal({ data, onClose, stages, profs, types }) {
 
   const startEdit = () => {
     setEf({
-      patient: x.patient || '',
-      dentist_id: x.dentist_id || '',
-      type: x.type || '',
-      material: x.material || '',
-      tooth: x.tooth || '',
-      shade: x.shade || '',
-      elements: x.elements || 1,
-      priority: x.priority || 'medium',
-      notes: x.notes || '',
-      due: x.due || '',
-      unit_price: x.unit_price || 0,
+      patient: x.patient || '', dentist_id: x.dentist_id || '',
+      type: x.type || '', material: x.material || '', tooth: x.tooth || '',
+      shade: x.shade || '', elements: x.elements || 1, priority: x.priority || 'medium',
+      notes: x.notes || '', due: x.due || '', unit_price: x.unit_price || 0,
     });
     setEditing(true); setErr('');
   };
@@ -53,12 +64,12 @@ export default function CaseModal({ data, onClose, stages, profs, types }) {
       const unit = Number(ef.unit_price) || 0;
       await save({
         patient: ef.patient, dentist_id: ef.dentist_id || null,
-        type: ef.type, material: ef.material, tooth: ef.tooth,
-        shade: ef.shade, elements: el, priority: ef.priority,
-        notes: ef.notes, due: ef.due || null,
+        type: ef.type, material: ef.material, tooth: ef.tooth, shade: ef.shade,
+        elements: el, priority: ef.priority, notes: ef.notes, due: ef.due || null,
         unit_price: unit, total_price: unit * el,
       });
       setEditing(false);
+      pushNotif?.(`Commande #${x.id} mise à jour`, 'ok');
     } catch (e) { setErr(e.message || 'Erreur'); }
     finally { setSaving(false); }
   };
@@ -66,8 +77,12 @@ export default function CaseModal({ data, onClose, stages, profs, types }) {
   const advanceStage = async (newStage) => {
     const log = [...(x.log || []), { at: now(), msg: `Étape → ${newStage}` }];
     await save({ stage: newStage, log });
+    pushNotif?.(`Étape changée → ${stages.find(s=>s.id===newStage)?.label || newStage}`, 'ok');
   };
-  const markPaid = async () => save({ paid: !x.paid });
+  const markPaid = async () => {
+    await save({ paid: !x.paid });
+    pushNotif?.(x.paid ? 'Commande marquée impayée' : 'Commande marquée payée', 'ok');
+  };
   const assignTech = async (stageId, techId) => {
     const a = { ...(x.assignments || {}) };
     a[stageId] = { ...(a[stageId] || {}), techId, assignedAt: a[stageId]?.assignedAt || now() };
@@ -78,6 +93,7 @@ export default function CaseModal({ data, onClose, stages, profs, types }) {
     a[stageId] = { ...(a[stageId] || {}), done: true, doneAt: now() };
     const log = [...(x.log || []), { at: now(), msg: `${stageId} terminé` }];
     await save({ assignments: a, log });
+    pushNotif?.(`Étape terminée : ${stages.find(s=>s.id===stageId)?.label || stageId}`, 'ok');
   };
   const markStageUndone = async (stageId) => {
     const a = { ...(x.assignments || {}) };
@@ -85,11 +101,15 @@ export default function CaseModal({ data, onClose, stages, profs, types }) {
     await save({ assignments: a });
   };
 
-  const MATERIALS = ['Zircone','E.max','PFM','Or','Résine','Composite'];
+  const downloadFile = (url, name) => {
+    const a = document.createElement('a');
+    a.href = url; a.download = name || 'fichier'; a.target = '_blank';
+    a.click();
+  };
 
   return (
     <>
-      <Modal onClose={onClose} w={660}>
+      <Modal onClose={onClose} w={680}>
         {/* Header */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
           <div>
@@ -107,34 +127,29 @@ export default function CaseModal({ data, onClose, stages, profs, types }) {
           <div style={{ background:c.bg, borderRadius:8, padding:12, marginBottom:10 }}>
             <div style={{ fontSize:FS-1, fontWeight:700, marginBottom:8 }}>✏️ Modifier la commande</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-              <div style={{ gridColumn:'1/-1' }}>
-                <Lbl>{t('patient')} *</Lbl>
-                <Inp value={ef.patient} onChange={e => setEf(p=>({...p, patient:e.target.value}))} />
-              </div>
+              <div style={{ gridColumn:'1/-1' }}><Lbl>{t('patient')} *</Lbl><Inp value={ef.patient} onChange={e=>setEf(p=>({...p,patient:e.target.value}))} /></div>
               <div style={{ gridColumn:'1/-1' }}>
                 <Lbl>Dentiste</Lbl>
-                <Sel value={ef.dentist_id} onChange={e => setEf(p=>({...p, dentist_id:e.target.value}))}>
+                <Sel value={ef.dentist_id} onChange={e=>setEf(p=>({...p,dentist_id:e.target.value}))}>
                   <option value="">—</option>
-                  {docs.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+                  {docs.map(d=><option key={d.id} value={d.id}>{d.name}{d.clinic?' · '+d.clinic:''}</option>)}
                 </Sel>
               </div>
               <div>
                 <Lbl>{t('type')}</Lbl>
-                <Sel value={ef.type} onChange={e => { const tp=types.find(x=>x.name===e.target.value); setEf(p=>({...p, type:e.target.value, elements: tp ? tp.elems : p.elements})); }}>
+                <Sel value={ef.type} onChange={e=>{const tp=types.find(x=>x.name===e.target.value);setEf(p=>({...p,type:e.target.value,elements:tp?tp.elems:p.elements}));}}>
                   {types.map(tp=><option key={tp.id}>{tp.name}</option>)}
-                  {ef.type && !types.find(tp=>tp.name===ef.type) && <option value={ef.type}>{ef.type}</option>}
+                  {ef.type&&!types.find(tp=>tp.name===ef.type)&&<option value={ef.type}>{ef.type}</option>}
                 </Sel>
               </div>
               <div>
                 <Lbl>{t('material')}</Lbl>
-                <Sel value={ef.material} onChange={e => setEf(p=>({...p, material:e.target.value}))}>
+                <Sel value={ef.material} onChange={e=>setEf(p=>({...p,material:e.target.value}))}>
                   {MATERIALS.map(m=><option key={m}>{m}</option>)}
-                  {ef.material && !MATERIALS.includes(ef.material) && <option>{ef.material}</option>}
+                  {ef.material&&!MATERIALS.includes(ef.material)&&<option>{ef.material}</option>}
                 </Sel>
               </div>
-              <div style={{ gridColumn:'1/-1' }}>
-                <ToothChart value={ef.tooth} onChange={v => setEf(p=>({...p, tooth:v}))} />
-              </div>
+              <div style={{ gridColumn:'1/-1' }}><ToothChart value={ef.tooth} onChange={v=>setEf(p=>({...p,tooth:v}))} /></div>
               <div><Lbl>{t('shade')}</Lbl><Inp value={ef.shade} onChange={e=>setEf(p=>({...p,shade:e.target.value}))} /></div>
               <div><Lbl>{t('elements')}</Lbl><Inp type="number" min="1" value={ef.elements} onChange={e=>setEf(p=>({...p,elements:e.target.value}))} /></div>
               <div><Lbl>Prix unitaire</Lbl><Inp type="number" min="0" value={ef.unit_price} onChange={e=>setEf(p=>({...p,unit_price:e.target.value}))} /></div>
@@ -154,19 +169,57 @@ export default function CaseModal({ data, onClose, stages, profs, types }) {
             </div>
           </div>
         ) : (
-          /* VIEW */
           <div style={{ background:c.bg, borderRadius:8, padding:10, marginBottom:10 }}>
-            <Row l={t('type')}>{x.type}</Row>
-            <Row l={t('material')}>{x.material}</Row>
+            <Row l={t('type')}><span style={{ fontWeight:700 }}>{x.type}</span></Row>
+            <Row l={t('material')}><span style={{ fontWeight:700, color:c.ac }}>{x.material}</span></Row>
             <Row l={t('tooth')}>{x.tooth||'—'}</Row>
             <Row l={t('shade')}>{x.shade}</Row>
             <Row l={t('elements')}>{x.elements}</Row>
             {isA && <Row l="Prix unitaire">{money(x.unit_price)}</Row>}
             {isA && <Row l="Total">{money(x.total_price)}</Row>}
-            <Row l={t('paid')}><span style={{ color: x.paid?c.ok:c.dng, fontWeight:700 }}>{x.paid?'✓ Payé':'✗ Impayé'}</span></Row>
+            <Row l={t('paid')}><span style={{ color:x.paid?c.ok:c.dng, fontWeight:700 }}>{x.paid?'✓ Payé':'✗ Impayé'}</span></Row>
             <Row l={t('due')}>{x.due||'—'}</Row>
             <Row l="Priorité">{x.priority==='high'?'🔴 Haute':x.priority==='low'?'🟢 Basse':'🟡 Moyenne'}</Row>
             {x.notes && <Row l={t('notes')}><span style={{ maxWidth:260, overflow:'hidden', textOverflow:'ellipsis', display:'inline-block' }}>{x.notes}</span></Row>}
+          </div>
+        )}
+
+        {/* FILES — visible to admin and assigned technicians (fraisage/maquillage) */}
+        {canSeeFiles && (x.files?.length > 0 || x.teinte_photo) && (
+          <div style={{ background:c.bg, borderRadius:8, padding:10, marginBottom:10 }}>
+            <div style={{ fontSize:FS-2, fontWeight:700, marginBottom:8 }}>📁 Fichiers & Photos</div>
+
+            {/* Teinte photo */}
+            {canSeeTeintePhoto && x.teinte_photo && (
+              <div style={{ marginBottom:8 }}>
+                <div style={{ fontSize:FS-3, fontWeight:600, color:c.txL, marginBottom:4 }}>🎨 PHOTO DE TEINTE</div>
+                <div style={{ display:'flex', gap:8, alignItems:'center', background:'#FEF3C7', padding:'8px 10px', borderRadius:8 }}>
+                  <img src={x.teinte_photo} alt="Teinte" style={{ width:60, height:60, objectFit:'cover', borderRadius:6, border:'2px solid #FDE68A' }} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:600, fontSize:FS-2 }}>Photo teinte Zircone</div>
+                    <div style={{ fontSize:FS-4, color:c.txL }}>Teinte: {x.shade}</div>
+                  </div>
+                  <Btn sm onClick={()=>downloadFile(x.teinte_photo, `teinte_${x.id}.jpg`)}>⬇️ Télécharger</Btn>
+                </div>
+              </div>
+            )}
+
+            {/* Other files */}
+            {x.files?.length > 0 && (
+              <div>
+                <div style={{ fontSize:FS-3, fontWeight:600, color:c.txL, marginBottom:4 }}>📎 FICHIERS ({x.files.length})</div>
+                {x.files.map((f, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid '+c.bdrL }}>
+                    <span style={{ fontSize:18 }}>
+                      {f.name?.match(/\.(stl|obj|3mf)$/i) ? '🖨️' : f.name?.match(/\.(jpg|jpeg|png|webp)$/i) ? '🖼️' : '📄'}
+                    </span>
+                    <span style={{ flex:1, fontSize:FS-2, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name || `Fichier ${i+1}`}</span>
+                    {f.size && <span style={{ fontSize:FS-4, color:c.txL }}>{(f.size/1024).toFixed(0)} KB</span>}
+                    <Btn sm onClick={()=>downloadFile(f.url, f.name)}>⬇️</Btn>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
