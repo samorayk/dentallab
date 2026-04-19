@@ -104,7 +104,11 @@ export default function SuppliersPage() {
                   <div style={{ fontWeight:700, fontSize:FS }}>{s.name}</div>
                   <div style={{ fontSize:FS-3, color:c.txL }}>{s.contact} · {s.phone}</div>
                 </div>
-                <button onClick={()=>setForm(s)} style={{ background:'none', border:'none', cursor:'pointer', color:c.txL }}>✏️</button>
+                <div style={{ display:'flex', gap:4 }}>
+                  <button onClick={()=>setForm(s)} style={{ background:'none', border:'none', cursor:'pointer', color:c.txL, fontSize:FS }}>✏️</button>
+                  <button onClick={async()=>{ if(!confirm(`Supprimer le fournisseur "${s.name}" et tous ses achats ?`)) return; await Sup.delete(s.id); reload(); }}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:c.dng, fontSize:FS }}>🗑</button>
+                </div>
               </div>
 
               {/* Stats */}

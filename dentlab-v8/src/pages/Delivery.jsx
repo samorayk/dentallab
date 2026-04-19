@@ -6,52 +6,62 @@ import DeliveryModal from '../components/modals/DeliveryModal';
 import EtiquetteModal from '../components/modals/EtiquetteModal';
 
 function DlvBadge({ st }) {
-  const { theme: c, FS, t } = useApp();
+  const { theme: c, FS } = useApp();
   const cfg = {
     pending:    { bg:'#FEF3C7', color:'#D97706', label:'⏳ En attente' },
     in_transit: { bg:'#DBEAFE', color:'#2563EB', label:'🚚 En transit' },
     delivered:  { bg:'#D1FAE5', color:'#059669', label:'✓ Livré' },
-  }[st || 'pending'] || { bg:'#F3F4F6', color:'#6B7280', label: st };
+  }[st||'pending'] || { bg:'#F3F4F6', color:'#6B7280', label:st };
   return <span style={{ background:cfg.bg, color:cfg.color, padding:'3px 10px', borderRadius:10, fontSize:FS-3, fontWeight:700 }}>{cfg.label}</span>;
 }
 
 export default function Delivery() {
-  const { theme: c, FS, isA, isD, profile } = useApp();
-  const [cs, setCs]     = useState([]);
+  const { theme: c, FS, isA, isD, profile, labId, pushNotif } = useApp();
+  const [cs, setCs]       = useState([]);
   const [profs, setProfs] = useState([]);
   const [filter, setFilter] = useState('all');
-  const [q, setQ]       = useState('');
-  const [dlv, setDlv]   = useState(null);
-  const [etq, setEtq]   = useState(null);
+  const [q, setQ]         = useState('');
+  const [dlv, setDlv]     = useState(null);
+  const [etq, setEtq]     = useState(null);
 
   const reload = async () => {
     const [a, b] = await Promise.all([Cases.list(), Profiles.list()]);
-    setCs(a.data || []); setProfs(b.data || []);
+    setCs(a.data||[]); setProfs(b.data||[]);
   };
   useEffect(() => { reload(); }, []);
 
-  // Admin sees all orders with stage=termine OR any delivery status set
-  // Dentist sees only their own orders
   const allCandidates = isD
-    ? cs.filter(x => x.dentist_id === profile.id)
-    : cs.filter(x => x.stage === 'termine' || (x.delivery?.status && x.delivery.status !== 'pending'));
+    ? cs.filter(x=>x.dentist_id===profile.id)
+    : cs.filter(x=>x.stage==='termine'||(x.delivery?.status&&x.delivery.status!=='pending'));
 
   const filtered = allCandidates.filter(x => {
-    if (filter !== 'all' && (x.delivery?.status || 'pending') !== filter) return false;
-    if (q && !(x.patient?.toLowerCase().includes(q.toLowerCase()) || x.id?.toLowerCase().includes(q.toLowerCase()))) return false;
+    if (filter!=='all' && (x.delivery?.status||'pending')!==filter) return false;
+    if (q && !(x.patient?.toLowerCase().includes(q.toLowerCase())||x.id?.toLowerCase().includes(q.toLowerCase()))) return false;
     return true;
   });
 
   const counts = {
     all:        allCandidates.length,
-    pending:    allCandidates.filter(x => (x.delivery?.status || 'pending') === 'pending').length,
-    in_transit: allCandidates.filter(x => x.delivery?.status === 'in_transit').length,
-    delivered:  allCandidates.filter(x => x.delivery?.status === 'delivered').length,
+    pending:    allCandidates.filter(x=>(x.delivery?.status||'pending')==='pending').length,
+    in_transit: allCandidates.filter(x=>x.delivery?.status==='in_transit').length,
+    delivered:  allCandidates.filter(x=>x.delivery?.status==='delivered').length,
   };
 
   const doc = id => {
-    const p = profs.find(p => p.id === id);
-    return p ? p.name + (p.clinic ? ' · ' + p.clinic : '') : '—';
+    const p = profs.find(p=>p.id===id);
+    return p ? p.name+(p.clinic?' · '+p.clinic:'') : '—';
+  };
+
+  const delOrder = async (e, x) => {
+    e.stopPropagation();
+    if (!confirm(`Supprimer la commande #${x.id} — ${x.patient} de la liste livraisons ?`)) return;
+    // Reset delivery status to pending (remove from delivery view)
+    const { error } = await Cases.update(labId, x.id, {
+      delivery: { status:'pending', driverName:'', driverPhone:'', deliveredAt:'' }
+    });
+    if (error) { pushNotif?.('Erreur: '+error.message, 'err'); return; }
+    pushNotif?.(`Commande #${x.id} retirée des livraisons`, 'info');
+    reload();
   };
 
   const FILTERS = [
@@ -63,29 +73,29 @@ export default function Delivery() {
 
   return (
     <div>
-      {/* Filters */}
       <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>
-        {FILTERS.map(f => (
-          <button key={f.id} onClick={() => setFilter(f.id)}
-            style={{ padding:'7px 14px', fontSize:FS-1.5, fontWeight:600, border:'1px solid '+(filter===f.id?c.ac:c.bdr),
-              borderRadius:999, background:filter===f.id?c.ac:'#fff', color:filter===f.id?'#fff':c.tx, cursor:'pointer', display:'inline-flex', alignItems:'center', gap:6 }}>
+        {FILTERS.map(f=>(
+          <button key={f.id} onClick={()=>setFilter(f.id)}
+            style={{ padding:'7px 14px', fontSize:FS-1.5, fontWeight:600,
+              border:'1px solid '+(filter===f.id?c.ac:c.bdr), borderRadius:999,
+              background:filter===f.id?c.ac:'#fff', color:filter===f.id?'#fff':c.tx,
+              cursor:'pointer', display:'inline-flex', alignItems:'center', gap:6 }}>
             {f.label}
             <span style={{ background:filter===f.id?'rgba(255,255,255,.25)':c.bg, padding:'1px 7px', borderRadius:10, fontSize:FS-3 }}>{counts[f.id]}</span>
           </button>
         ))}
-        <Inp placeholder="Rechercher patient / ID…" value={q} onChange={e => setQ(e.target.value)} style={{ maxWidth:220, marginLeft:'auto' }} />
+        <Inp placeholder="Rechercher…" value={q} onChange={e=>setQ(e.target.value)} style={{ maxWidth:200, marginLeft:'auto' }} />
       </div>
 
       <Card style={{ padding:0, overflow:'hidden' }}>
-        {filtered.length === 0 && (
+        {filtered.length===0 && (
           <div style={{ padding:40, textAlign:'center', color:c.txL }}>
             <div style={{ fontSize:32, marginBottom:8 }}>🚚</div>
-            <div>{isD ? 'Aucune commande avec statut livraison' : 'Aucune livraison'}</div>
+            <div>{isD?'Aucune commande avec statut livraison':'Aucune livraison'}</div>
           </div>
         )}
         {filtered.map(x => {
-          const d = x.delivery || { status:'pending' };
-          const st = (x.stage === 'termine') ? null : x.stage;
+          const d = x.delivery||{ status:'pending' };
           return (
             <div key={x.id} style={{ padding:'12px 14px', borderBottom:'1px solid '+c.bdrL, display:'flex', alignItems:'flex-start', gap:10, flexWrap:'wrap' }}>
               <div style={{ flex:'1 1 220px', minWidth:0 }}>
@@ -95,14 +105,14 @@ export default function Delivery() {
                   <DlvBadge st={d.status} />
                 </div>
                 <div style={{ fontSize:FS-3, color:c.txL }}>
-                  {x.type} · {x.material} · 🦷 {x.tooth || '—'}
+                  {x.type}{x.material?' · '+x.material:''} · 🦷 {x.tooth||'—'}
                 </div>
                 <div style={{ fontSize:FS-3, color:c.txL, marginTop:2 }}>
                   Dr. {doc(x.dentist_id)}
                 </div>
                 {d.driverName && (
                   <div style={{ fontSize:FS-3, color:c.txM, marginTop:2 }}>
-                    🚗 {d.driverName} {d.driverPhone ? '· ' + d.driverPhone : ''}
+                    🚗 {d.driverName}{d.driverPhone?' · '+d.driverPhone:''}
                   </div>
                 )}
                 {d.deliveredAt && (
@@ -110,22 +120,27 @@ export default function Delivery() {
                     ✓ Livré le {d.deliveredAt}
                   </div>
                 )}
-                {d.note && <div style={{ fontSize:FS-3, color:c.txL, marginTop:2 }}>📝 {d.note}</div>}
               </div>
-              {/* Admin can edit, dentist only views */}
-              {isA && (
-                <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                  <Btn sm onClick={() => setDlv(x)}>✏️ Modifier</Btn>
-                  <Btn sm onClick={() => setEtq(x)}>🏷️ Étiquette</Btn>
-                </div>
-              )}
+
+              <div style={{ display:'flex', gap:6, flexShrink:0, flexWrap:'wrap' }}>
+                {isA && <Btn sm onClick={()=>setDlv(x)}>✏️ Modifier</Btn>}
+                {isA && <Btn sm onClick={()=>setEtq(x)}>🏷️</Btn>}
+                {isA && (
+                  <button onClick={e=>delOrder(e,x)}
+                    style={{ background:'none', border:'1px solid '+c.dng, color:c.dng, borderRadius:6,
+                      padding:'4px 8px', cursor:'pointer', fontSize:FS-3, fontWeight:600 }}
+                    title="Retirer des livraisons">
+                    🗑
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
       </Card>
 
-      {dlv && <DeliveryModal data={dlv} onClose={() => { setDlv(null); reload(); }} />}
-      {etq && <EtiquetteModal data={etq} profs={profs} onClose={() => setEtq(null)} />}
+      {dlv && <DeliveryModal data={dlv} onClose={()=>{ setDlv(null); reload(); }} />}
+      {etq && <EtiquetteModal data={etq} profs={profs} onClose={()=>setEtq(null)} />}
     </div>
   );
 }
